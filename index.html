@@ -203,7 +203,7 @@ footer{background:#060d1a;color:rgba(255,255,255,0.7);padding:36px 20px;text-ali
 
 <div class="img-section" data-section="benefits">
   <img class="fullscreen-img" src="benefits.jpg" alt="المميزات" loading="eager" fetchpriority="high" decoding="async" onload="this.classList.add('fade-in');gaTrack('image_load',{section:'benefits'});"/>
-  <span class="fb-price" data-price="4500">4500 دج</span>
+  <span class="fb-price" data-price="3900">3900 دج</span>
 </div>
 
 <div class="img-section" data-section="reviews">
@@ -429,10 +429,54 @@ const META_CAPI_URL        = 'https://graph.facebook.com/v19.0/' + META_PIXEL_ID
 const APPS_SCRIPT_URL      = 'https://script.google.com/macros/s/AKfycbxHmg0SEI9w5yY3AEW_Ad1X3tYkJFauV-AbEMB_LWjDNdN1X_u56JliLq5WdG4PCej7/exec';
 const CAPI_WORKER_URL      = 'https://maisonkidsy1.rbxabdou.workers.dev/';
 const PRODUCT_BASE         = 4500;
-const PIXEL_PRODUCT_ID     = 'MK-ENSETE26-9184';
 const PIXEL_PRICE_PER_UNIT = 4500;
+const PIXEL_PRODUCT_ID     = 'MK-ENSETE26-9184';
 const BOT1 = { token:'8671482276:AAEo1-ukI0DhkkogouHFmXNS5Vw4Pwtqb08', chat:'6405258861' };
 const BOT2 = { token:'8615975210:AAEeXD5idRGumK783uqPKRhOBpRVXMfhuM0', chat:'5657761278' };
+
+/* ── META DYNAMIC PRICE CYCLING (3900 → 3600 → 3900) ── */
+function getMetaPriceState() {
+  try {
+    let price = parseInt(localStorage.getItem('mk_meta_price'));
+    let direction = localStorage.getItem('mk_meta_direction');
+    if (isNaN(price)) price = 3900;
+    if (!direction) direction = 'down';
+    return { price, direction };
+  } catch(e) {
+    return { price: 3900, direction: 'down' };
+  }
+}
+function getCurrentMetaPrice() {
+  return getMetaPriceState().price;
+}
+function getMetaProductPrice(qty) {
+  return getCurrentMetaPrice() * qty;
+}
+function getMetaTotalPrice(qty, delivery) {
+  return getMetaProductPrice(qty) + delivery;
+}
+function advanceMetaPrice() {
+  try {
+    let { price, direction } = getMetaPriceState();
+    if (direction === 'down') {
+      price -= 50;
+      if (price <= 3600) { price = 3600; direction = 'up'; }
+    } else {
+      price += 50;
+      if (price >= 3900) { price = 3900; direction = 'down'; }
+    }
+    localStorage.setItem('mk_meta_price', price);
+    localStorage.setItem('mk_meta_direction', direction);
+  } catch(e) {}
+}
+function updateFbPriceMicrodata() {
+  const price = getCurrentMetaPrice();
+  const el = document.querySelector('.fb-price');
+  if (el) {
+    el.setAttribute('data-price', price);
+    el.textContent = price + ' دج';
+  }
+}
 
 /* ── MULTILINGUAL PRODUCT DATA ── */
 const PRODUCT_I18N = {
@@ -672,7 +716,7 @@ async function sendMetaCAPIEvent(eventName, customData, extraParams) {
   const contents = [{
     id: PIXEL_PRODUCT_ID,
     quantity: currentQty,
-    item_price: PIXEL_PRICE_PER_UNIT,
+    item_price: getCurrentMetaPrice(),
     title: PRODUCT_I18N.fr.name,
     title_ar: PRODUCT_I18N.ar.name,
     title_en: PRODUCT_I18N.en.name,
@@ -695,7 +739,7 @@ async function sendMetaCAPIEvent(eventName, customData, extraParams) {
       contents: contents,
       num_items: currentQty,
       currency: 'DZD',
-      value: customData.value !== undefined ? customData.value : getTotalPrice(currentQty, currentDeliveryPrice)
+      value: customData.value !== undefined ? customData.value : getMetaTotalPrice(currentQty, currentDeliveryPrice)
     }))
   };
 
@@ -719,33 +763,33 @@ function capiPageView() {
   return sendMetaCAPIEvent('PageView', {});
 }
 function capiViewContent() {
-  return sendMetaCAPIEvent('ViewContent', { value: PIXEL_PRICE_PER_UNIT });
+  return sendMetaCAPIEvent('ViewContent', { value: getCurrentMetaPrice() });
 }
 function metaViewContent() {
   fbq('track','ViewContent', buildRichCustomData({
     content_ids:[PIXEL_PRODUCT_ID], content_type:'product',
-    currency:'DZD', value:PIXEL_PRICE_PER_UNIT
+    currency:'DZD', value:getCurrentMetaPrice()
   }));
 }
 
 function capiAddToCart(qty, evId) {
-  return sendMetaCAPIEvent('AddToCart', { value: getProductPrice(qty) }, evId ? { event_id: evId } : {});
+  return sendMetaCAPIEvent('AddToCart', { value: getMetaProductPrice(qty) }, evId ? { event_id: evId } : {});
 }
 function metaAddToCart(qty, evId) {
   fbq('track','AddToCart', buildRichCustomData({
     content_ids:[PIXEL_PRODUCT_ID], content_type:'product',
     contents:buildContents(qty), num_items:qty,
-    currency:'DZD', value:getProductPrice(qty)
+    currency:'DZD', value:getMetaProductPrice(qty)
   }), evId ? { eventID: evId } : {});
 }
 
 function capiCustomizeProduct(evId) {
-  return sendMetaCAPIEvent('CustomizeProduct', { value: PIXEL_PRICE_PER_UNIT }, evId ? { event_id: evId } : {});
+  return sendMetaCAPIEvent('CustomizeProduct', { value: getCurrentMetaPrice() }, evId ? { event_id: evId } : {});
 }
 function metaCustomizeProduct(evId) {
   fbq('track','CustomizeProduct', buildRichCustomData({
     content_ids:[PIXEL_PRODUCT_ID], content_type:'product',
-    currency:'DZD', value:PIXEL_PRICE_PER_UNIT,
+    currency:'DZD', value:getCurrentMetaPrice(),
     custom_field_color: selectedColor,
     custom_field_size: selectedSize
   }), evId ? { eventID: evId } : {});
@@ -761,12 +805,12 @@ function metaFindLocation(wilaya, evId) {
 }
 
 function capiInitiateCheckout(qty, evId) {
-  return sendMetaCAPIEvent('InitiateCheckout', { value: getProductPrice(qty) }, evId ? { event_id: evId } : {});
+  return sendMetaCAPIEvent('InitiateCheckout', { value: getMetaProductPrice(qty) }, evId ? { event_id: evId } : {});
 }
 function metaInitiateCheckout(qty, evId) {
   fbq('track','InitiateCheckout', buildRichCustomData({
     contents:[{id:PIXEL_PRODUCT_ID,quantity:qty}], content_type:'product',
-    num_items:qty, currency:'DZD', value:getProductPrice(qty)
+    num_items:qty, currency:'DZD', value:getMetaProductPrice(qty)
   }), evId ? { eventID: evId } : {});
 }
 
@@ -840,7 +884,7 @@ function capiTimeOnPage(seconds) {
 }
 
 function buildContents(qty) {
-  return [{ id:PIXEL_PRODUCT_ID, quantity:qty, item_price:PIXEL_PRICE_PER_UNIT }];
+  return [{ id:PIXEL_PRODUCT_ID, quantity:qty, item_price: getCurrentMetaPrice() }];
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1366,6 +1410,7 @@ async function submitOrder() {
   const effDel        = getEffDelivery(currentQty, currentDeliveryPrice);
   const total         = getTotalPrice(currentQty, currentDeliveryPrice);
   const productPrice  = getProductPrice(currentQty);
+  const metaTotal     = getMetaTotalPrice(currentQty, effDel);
   const now           = new Date();
   const dateStr       = now.toLocaleDateString('fr-DZ') + ' ' + now.toLocaleTimeString('fr-DZ');
   const sku           = getSKU(selectedColor, selectedSize);
@@ -1437,18 +1482,18 @@ async function submitOrder() {
   (async () => {
     try {
       metaInitiateCheckout(snapQty, icEvId);
-      metaPurchase(orderId, total, snapQty, effDel, purchaseEvId);
-      metaLead(orderId, total, leadEvId);
-      metaCompleteRegistration(orderId, total, crEvId);
+      metaPurchase(orderId, metaTotal, snapQty, effDel, purchaseEvId);
+      metaLead(orderId, metaTotal, leadEvId);
+      metaCompleteRegistration(orderId, metaTotal, crEvId);
 
       ttqFireInitiateCheckout(snapQty);
       ttqFireSubmitForm(customerName, customerPhone, wilayaText);
 
       await Promise.allSettled([
         capiInitiateCheckout(snapQty, icEvId),
-        capiPurchase(orderId, total, snapQty, effDel, purchaseEvId),
-        capiLead(orderId, total, leadEvId),
-        capiCompleteRegistration(orderId, total, crEvId),
+        capiPurchase(orderId, metaTotal, snapQty, effDel, purchaseEvId),
+        capiLead(orderId, metaTotal, leadEvId),
+        capiCompleteRegistration(orderId, metaTotal, crEvId),
       ]);
 
       const e164  = phoneToE164(customerPhone);
@@ -1467,6 +1512,9 @@ async function submitOrder() {
       };
       await sendTikTokCAPIEvent('SubmitForm', { orderId, qty:snapQty }, hashedCustomer);
     } catch(e) {}
+
+    advanceMetaPrice();
+    updateFbPriceMicrodata();
   })();
 }
 
@@ -1513,6 +1561,7 @@ function initTracking() {
   });
 
   applyStockForColor(selectedColor, {silent:true});
+  updateFbPriceMicrodata();
 }
 
 if (document.readyState === 'loading') {
