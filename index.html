@@ -146,9 +146,12 @@ body{font-family:'Cairo',sans-serif,system-ui,-apple-system;background:var(--nav
 .qty-btn{width:52px;height:52px;background:var(--navy);color:white;border:none;font-size:1.4rem;cursor:pointer;font-family:'Cairo',sans-serif;transition:background 0.2s;flex-shrink:0;}
 .qty-btn:hover{background:#1e3a6e;}
 .qty-display{flex:1;text-align:center;font-size:1.3rem;font-weight:900;color:var(--navy);padding:12px;min-width:60px;}
+
+/* ── TOTAL PRICE SVG DISPLAY ── */
 .total-price-wrap{background:linear-gradient(135deg,#fafbff,#f0f4ff);border-radius:14px;padding:18px 20px;border:2px dashed var(--gold);text-align:center;margin-top:6px;}
-.total-price-wrap .label{font-size:0.85rem;color:var(--gray);font-weight:600;display:block;margin-bottom:6px;}
-#totalPriceCanvas{display:block;margin:0 auto;max-width:100%;height:auto;border-radius:8px;background:transparent;}
+.total-price-wrap .label{font-size:0.85rem;color:var(--gray);font-weight:600;display:block;margin-bottom:10px;}
+.total-price-svg-wrap{max-width:320px;margin:0 auto;display:block;}
+#totalPriceSVG{width:100%;height:auto;display:block;}
 
 footer{background:#060d1a;color:rgba(255,255,255,0.7);padding:36px 20px;text-align:center;}
 .footer-inner{max-width:800px;margin:0 auto;}
@@ -355,7 +358,19 @@ footer{background:#060d1a;color:rgba(255,255,255,0.7);padding:36px 20px;text-ali
       <div class="form-group">
         <div class="total-price-wrap">
           <span class="label">💰 المجموع الكامل (المنتج + التوصيل)</span>
-          <canvas id="totalPriceCanvas" width="400" height="72"></canvas>
+          <div class="total-price-svg-wrap">
+            <svg id="totalPriceSVG" viewBox="0 0 400 84" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="totalPriceDesc">
+              <title id="totalPriceDesc">المجموع الكامل</title>
+              <defs>
+                <linearGradient id="totalBoxGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#122040"/>
+                  <stop offset="100%" stop-color="#0A1628"/>
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="396" height="80" rx="16" fill="url(#totalBoxGrad)" stroke="#F5C518" stroke-width="2.5"/>
+              <text id="totalPriceText" x="200" y="52" text-anchor="middle" font-family="Cairo, sans-serif" font-weight="900" font-size="36" fill="#F5C518">0 دج</text>
+            </svg>
+          </div>
         </div>
       </div>
 
@@ -700,6 +715,9 @@ async function sendMetaCAPIEvent(eventName, customData, extraParams) {
    ALL STANDARD EVENTS — Browser + Server with shared event_id
 ═══════════════════════════════════════════════════════════════════════ */
 
+function capiPageView() {
+  return sendMetaCAPIEvent('PageView', {});
+}
 function capiViewContent() {
   return sendMetaCAPIEvent('ViewContent', { value: PIXEL_PRICE_PER_UNIT });
 }
@@ -1109,29 +1127,15 @@ window.addEventListener('scroll', () => {
 updateFloatBtn();
 
 /* ═══════════════════════════════════════════════════════════════════════
-   CANVAS PRICE RENDERER
+   SVG TOTAL PRICE RENDERER (bold yellow price, replaces old canvas draw)
 ═══════════════════════════════════════════════════════════════════════ */
-const canvas=document.getElementById('totalPriceCanvas');
-const ctx=canvas.getContext('2d');
-if(!CanvasRenderingContext2D.prototype.roundRect){
-  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
-    r=Math.min(r,w/2,h/2);
-    this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);
-    this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);return this;
-  };
-}
+const totalPriceTextEl = document.getElementById('totalPriceText');
+
 function renderTotalPrice() {
-  const total=getTotalPrice(currentQty,currentDeliveryPrice);
-  const w=canvas.width, h=canvas.height;
-  ctx.clearRect(0,0,w,h);
-  const g=ctx.createLinearGradient(0,0,w,0);g.addColorStop(0,'#F5C518');g.addColorStop(1,'#E8A800');
-  ctx.fillStyle=g;ctx.shadowColor='rgba(245,197,24,0.35)';ctx.shadowBlur=20;
-  ctx.beginPath();ctx.roundRect(0,0,w,h,12);ctx.fill();ctx.shadowBlur=0;
-  ctx.fillStyle='rgba(255,255,255,0.12)';ctx.beginPath();ctx.roundRect(4,4,w-8,h-8,10);ctx.fill();
-  ctx.fillStyle='rgba(10,22,40,0.6)';ctx.font='bold 16px Cairo,sans-serif';ctx.textAlign='right';ctx.textBaseline='middle';
-  ctx.fillText('المجموع الكامل',w-20,28);
-  ctx.fillStyle='#0A1628';ctx.font='bold 38px Cairo,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(total.toLocaleString('fr-DZ')+' دج',w/2,50);
+  const total = getTotalPrice(currentQty, currentDeliveryPrice);
+  if (totalPriceTextEl) {
+    totalPriceTextEl.textContent = total.toLocaleString('fr-DZ') + ' دج';
+  }
 }
 
 function updateUI() {
@@ -1228,7 +1232,7 @@ document.getElementById('cardVertEau').addEventListener('click', function() {
   selectedColor="Vert D'eau";
   document.getElementById('cardVertEau').classList.add('active');
   document.getElementById('cardVertMili').classList.remove('active');
-  document.querySelector("input[value="Vert D'eau"]").checked=true;
+  document.querySelector("input[value=\"Vert D'eau\"]").checked=true;
   document.getElementById('colorErr').classList.remove('show');
   applyStockForColor(selectedColor);
 
@@ -1384,29 +1388,17 @@ async function submitOrder() {
   partialCustomer.country   = 'dz';
 
   const message =
-    '🛒 <b>طلب جديد — Ensemble été 2026 (FB ADS ABDOU)</b>
-
-' +
-    '🆔 <b>رقم الطلب:</b> ' + orderId + '
-' +
-    '👤 <b>الاسم:</b> ' + customerName + '
-' +
-    '📱 <b>الهاتف:</b> ' + customerPhone + '
-' +
-    '📍 <b>الولاية:</b> ' + wilayaText + '
-' +
-    '🎨 <b>اللون / المقاس:</b> ' + snapColor + ' / ' + snapSize + '
-' +
-    '🏷️ <b>SKU:</b> ' + sku + '
-' +
-    '📦 <b>الكمية:</b> ' + snapQty + '
-' +
-    '💰 <b>المنتج:</b> ' + productPrice.toLocaleString('fr-DZ') + ' دج
-' +
-    '🚚 <b>التوصيل:</b> ' + effDel.toLocaleString('fr-DZ') + ' دج
-' +
-    '💵 <b>المجموع:</b> ' + total.toLocaleString('fr-DZ') + ' دج
-' +
+    '🛒 <b>طلب جديد — Ensemble été 2026 (FB ADS ABDOU)</b>\n\n' +
+    '🆔 <b>رقم الطلب:</b> ' + orderId + '\n' +
+    '👤 <b>الاسم:</b> ' + customerName + '\n' +
+    '📱 <b>الهاتف:</b> ' + customerPhone + '\n' +
+    '📍 <b>الولاية:</b> ' + wilayaText + '\n' +
+    '🎨 <b>اللون / المقاس:</b> ' + snapColor + ' / ' + snapSize + '\n' +
+    '🏷️ <b>SKU:</b> ' + sku + '\n' +
+    '📦 <b>الكمية:</b> ' + snapQty + '\n' +
+    '💰 <b>المنتج:</b> ' + productPrice.toLocaleString('fr-DZ') + ' دج\n' +
+    '🚚 <b>التوصيل:</b> ' + effDel.toLocaleString('fr-DZ') + ' دج\n' +
+    '💵 <b>المجموع:</b> ' + total.toLocaleString('fr-DZ') + ' دج\n' +
     '📅 <b>التاريخ:</b> ' + dateStr;
 
   const sheetPayload = {
